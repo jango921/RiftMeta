@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { RefreshCw, CheckCircle2, AlertCircle, Activity } from 'lucide-react'
+import { Activity, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
 import axios from 'axios'
 
 interface WorkerStatusData {
@@ -41,39 +41,43 @@ export default function WorkerStatus() {
   if (!status) return null
 
   const hasData = status.matchesTotal > 0
+  const Icon = status.running ? Activity : hasData ? CheckCircle2 : AlertCircle
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl mb-8 text-xs"
-         style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-      {status.running ? (
-        <Activity className="w-3.5 h-3.5 text-teal-400 shrink-0 animate-pulse" />
-      ) : hasData ? (
-        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-      ) : (
-        <AlertCircle className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-      )}
+    <div className="rift-panel flex flex-col gap-3 px-4 py-3 text-xs sm:flex-row sm:items-center">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.03]">
+          {status.running && <span className="absolute inset-1 rounded-md bg-teal-400/10 animate-pulse" />}
+          <Icon className={`relative h-4 w-4 ${status.running ? 'text-teal-300' : hasData ? 'text-emerald-300' : 'text-slate-500'}`} />
+        </span>
 
-      <span className="text-gray-500">
-        {status.running
-          ? <><span className="text-teal-400 font-medium">Collecting</span> · {status.matchesThisRun > 0 ? `${status.matchesThisRun.toLocaleString()} matches processed` : 'starting…'}</>
-          : hasData
-          ? <><span className="text-gray-400">{status.matchesTotal.toLocaleString()}</span> matches · patch <span className="text-gray-400">{status.lastRunPatch}</span></>
-          : 'No match data yet'}
-      </span>
-
-      {status.error && <span className="text-red-400/70">· {status.error}</span>}
+        <div className="min-w-0">
+          <div className="font-bold text-slate-200">
+            {status.running
+              ? 'Collecting ranked matches'
+              : hasData
+              ? 'Data worker ready'
+              : 'No match data yet'}
+          </div>
+          <div className="truncate text-slate-500">
+            {status.running
+              ? `${status.matchesThisRun.toLocaleString()} matches processed this run`
+              : hasData
+              ? `${status.matchesTotal.toLocaleString()} matches - patch ${status.lastRunPatch || '-'}`
+              : 'Start the worker to unlock live rankings, builds, runes, and counters'}
+            {status.error ? ` - ${status.error}` : ''}
+          </div>
+        </div>
+      </div>
 
       {!status.running && (
         <button
           onClick={trigger}
           disabled={triggering}
-          className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all duration-150 disabled:opacity-40"
-          style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(156,163,175,1)' }}
-          onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(200,155,60,0.3)')}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)')}
+          className="btn-ghost sm:ml-auto"
         >
-          <RefreshCw className={`w-3 h-3 ${triggering ? 'animate-spin' : ''}`} />
-          {hasData ? 'Re-run' : 'Start'}
+          <RefreshCw className={`h-3.5 w-3.5 ${triggering ? 'animate-spin' : ''}`} />
+          {hasData ? 'Refresh Data' : 'Start Worker'}
         </button>
       )}
     </div>

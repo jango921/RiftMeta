@@ -1,162 +1,178 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --rift-bg: #050810;
+    --rift-surface: #0a0f1a;
+    --rift-panel: #101624;
+    --rift-panel-2: #141c2c;
+    --rift-line: rgba(200, 155, 60, 0.18);
+    --rift-line-soft: rgba(255, 255, 255, 0.08);
+    --rift-gold: #c89b3c;
+    --rift-gold-bright: #f0c84d;
+    --rift-teal: #0ac8b9;
+    --rift-red: #e84057;
+  }
 
   *, *::before, *::after { box-sizing: border-box; }
 
   html { scroll-behavior: smooth; }
 
   body {
-    @apply bg-surface-1 text-gray-100 font-body antialiased;
-    background-image: var(--tw-bg-aurora, none);
+    @apply text-slate-100 font-body antialiased;
     min-height: 100vh;
+    background:
+      linear-gradient(180deg, rgba(5, 8, 16, 0.96), rgba(5, 8, 16, 1)),
+      radial-gradient(circle at 22% 0%, rgba(10, 200, 185, 0.12), transparent 34%),
+      radial-gradient(circle at 72% 8%, rgba(200, 155, 60, 0.12), transparent 30%),
+      #050810;
   }
 
+  button, input, select { font: inherit; }
+
   ::selection {
-    background: rgba(200,155,60,0.3);
+    background: rgba(200, 155, 60, 0.34);
     color: #fff;
   }
 }
 
 @layer components {
-
-  /* ---- Glass panels ---- */
-  .glass {
-    background: rgba(13,17,23,0.7);
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid rgba(255,255,255,0.06);
-    box-shadow: var(--tw-shadow-panel, 0 4px 24px rgba(0,0,0,0.5));
+  .rift-bg {
+    min-height: 100vh;
+    background:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px),
+      radial-gradient(circle at 15% 4%, rgba(10,200,185,0.10), transparent 28%),
+      radial-gradient(circle at 78% 0%, rgba(200,155,60,0.12), transparent 30%),
+      var(--rift-bg);
+    background-size: 48px 48px, 48px 48px, auto, auto, auto;
   }
 
-  .glass-gold {
-    background: rgba(13,17,23,0.75);
-    backdrop-filter: blur(20px) saturate(200%);
-    -webkit-backdrop-filter: blur(20px) saturate(200%);
-    border: 1px solid rgba(200,155,60,0.18);
-    box-shadow: 0 0 0 1px rgba(200,155,60,0.05) inset, 0 8px 32px rgba(0,0,0,0.5);
+  .rift-shell {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
 
-  /* Legacy alias – keep existing code working */
-  .panel { @apply glass rounded-2xl overflow-hidden; }
+  .rift-panel {
+    @apply rounded-lg overflow-hidden;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01)),
+      rgba(10, 15, 26, 0.92);
+    border: 1px solid var(--rift-line-soft);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 18px 44px rgba(0,0,0,0.36);
+  }
+
+  .rift-panel-gold {
+    @apply rift-panel;
+    border-color: var(--rift-line);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 0 0 1px rgba(200,155,60,0.05), 0 20px 54px rgba(0,0,0,0.45);
+  }
+
+  .rift-section-title {
+    @apply font-display text-xs font-bold uppercase text-gold-400;
+    letter-spacing: 0.14em;
+  }
+
+  .panel { @apply rift-panel; }
+
   .panel-header {
-    @apply px-5 py-3.5 flex items-center gap-2.5;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    @apply px-4 py-3 flex items-center gap-2.5;
+    background: linear-gradient(90deg, rgba(200,155,60,0.11), rgba(255,255,255,0.015));
+    border-bottom: 1px solid rgba(255,255,255,0.07);
   }
+
   .panel-title {
-    @apply font-display text-gold-500 text-xs font-semibold uppercase tracking-[0.12em];
+    @apply rift-section-title;
   }
 
-  /* ---- Bento card ---- */
-  .bento {
-    @apply relative rounded-3xl overflow-hidden transition-all duration-500;
-    background: rgba(17,24,39,0.6);
-    border: 1px solid rgba(255,255,255,0.05);
-    box-shadow: var(--tw-shadow-card);
-  }
-  .bento:hover {
-    box-shadow: var(--tw-shadow-card-hover);
-    border-color: rgba(200,155,60,0.12);
-    transform: translateY(-2px);
-  }
-  .bento::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--tw-bg-card-shine);
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* ---- Buttons ---- */
   .btn-primary {
-    @apply relative inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm
-           transition-all duration-200 overflow-hidden;
-    background: linear-gradient(135deg, #C89B3C, #e8b319, #C89B3C);
-    background-size: 200% 100%;
-    color: #080C14;
-    box-shadow: 0 4px 16px rgba(200,155,60,0.3);
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-extrabold uppercase text-slate-950 transition-all duration-150;
+    letter-spacing: 0.08em;
+    background: linear-gradient(180deg, #f0c84d, #c89b3c 52%, #8a6728);
+    border: 1px solid rgba(255, 232, 141, 0.48);
+    box-shadow: 0 10px 24px rgba(200,155,60,0.24);
   }
+
   .btn-primary:hover {
-    background-position: right center;
-    box-shadow: 0 6px 24px rgba(200,155,60,0.45);
+    filter: brightness(1.08);
     transform: translateY(-1px);
   }
-  .btn-primary:active { transform: translateY(0); }
 
   .btn-ghost {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
-           border border-white/10 text-gray-400 hover:text-white hover:border-white/20
-           transition-all duration-200 hover:bg-white/5;
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-slate-300 transition-all duration-150;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.09);
   }
 
-  /* ---- Role pill ---- */
-  .role-btn {
-    @apply px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/10
-           text-gray-500 hover:text-gray-200 hover:border-white/20 hover:bg-white/5
-           transition-all duration-150;
-  }
-  .role-btn-active {
-    @apply border-gold-500/40 text-gold-400;
+  .btn-ghost:hover {
+    @apply text-white;
+    border-color: rgba(200,155,60,0.32);
     background: rgba(200,155,60,0.08);
-    box-shadow: 0 0 12px rgba(200,155,60,0.1);
   }
 
-  /* ---- Skill badge ---- */
+  .role-btn {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-xs font-extrabold uppercase text-slate-400 transition-all duration-150;
+    letter-spacing: 0.06em;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .role-btn:hover {
+    @apply text-white;
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.16);
+  }
+
+  .role-btn-active {
+    @apply text-gold-300;
+    background: linear-gradient(180deg, rgba(200,155,60,0.19), rgba(200,155,60,0.07));
+    border-color: rgba(200,155,60,0.46);
+    box-shadow: 0 0 0 1px rgba(200,155,60,0.08) inset, 0 10px 28px rgba(200,155,60,0.08);
+  }
+
+  .stat-chip {
+    @apply rounded-md px-2.5 py-1 text-xs font-bold;
+    background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
   .skill-badge {
-    @apply w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold
-           border transition-all duration-150;
-  }
-  .skill-Q { @apply border-blue-500/40  text-blue-400  bg-blue-950/40; }
-  .skill-W { @apply border-teal-500/40  text-teal-400  bg-teal-950/40; }
-  .skill-E { @apply border-purple-500/40 text-purple-400 bg-purple-950/40; }
-  .skill-R { @apply border-yellow-500/40 text-yellow-400 bg-yellow-950/40; }
-
-  /* ---- Stat chip ---- */
-  .stat-value-good { @apply text-emerald-400; }
-  .stat-value-avg  { @apply text-gray-300; }
-  .stat-value-bad  { @apply text-red-400; }
-
-  /* ---- Shimmer loading ---- */
-  .shimmer-line {
-    @apply rounded-lg bg-surface-3 relative overflow-hidden;
-  }
-  .shimmer-line::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
-    animation: shimmer 1.8s infinite;
+    @apply flex h-9 w-9 items-center justify-center rounded-md border text-xs font-black transition-all duration-150;
   }
 
-  /* ---- Table rows ---- */
+  .skill-Q { @apply border-blue-400/40 bg-blue-950/40 text-blue-300; }
+  .skill-W { @apply border-teal-400/40 bg-teal-950/40 text-teal-300; }
+  .skill-E { @apply border-fuchsia-400/40 bg-fuchsia-950/35 text-fuchsia-300; }
+  .skill-R { @apply border-gold-400/50 bg-gold-950/40 text-gold-300; }
+
   .data-row {
-    @apply border-b border-white/[0.04] transition-colors duration-100;
+    border-bottom: 1px solid rgba(255,255,255,0.055);
+    transition: background-color 120ms ease, border-color 120ms ease;
   }
-  .data-row:hover { background: rgba(255,255,255,0.025); }
-  .data-row:last-child { @apply border-0; }
 
-  /* ---- Glow text ---- */
+  .data-row:hover {
+    background: rgba(255,255,255,0.035);
+    border-color: rgba(200,155,60,0.16);
+  }
+
+  .data-row:last-child { border-bottom: 0; }
+
   .text-glow-gold {
-    text-shadow: 0 0 20px rgba(200,155,60,0.5), 0 0 40px rgba(200,155,60,0.2);
-  }
-  .text-glow-teal {
-    text-shadow: 0 0 20px rgba(10,200,185,0.5);
+    text-shadow: 0 0 18px rgba(200,155,60,0.44), 0 0 42px rgba(200,155,60,0.16);
   }
 
-  /* ---- Gradient text ---- */
   .gradient-gold {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #e8b319 0%, #C89B3C 50%, #f0c84d 100%);
+    background-image: linear-gradient(180deg, #fff3b0 0%, #f0c84d 40%, #c89b3c 72%, #8a6728 100%);
   }
+
   .gradient-aurora {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #C89B3C 0%, #0AC8B9 50%, #7B2BE2 100%);
+    background-image: linear-gradient(135deg, #f0c84d 0%, #0ac8b9 58%, #8bd7ff 100%);
   }
 }
 
@@ -166,19 +182,14 @@
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.08) transparent;
+    scrollbar-color: rgba(200,155,60,0.32) transparent;
   }
-  .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.08);
-    border-radius: 2px;
+    background: rgba(200,155,60,0.32);
+    border-radius: 999px;
   }
 
-  /* Force GPU layer for smooth animations */
   .gpu { transform: translateZ(0); will-change: transform; }
-
-  .border-shine {
-    border-image: linear-gradient(135deg, rgba(200,155,60,0.4), rgba(10,200,185,0.2), rgba(123,43,226,0.3)) 1;
-  }
 }

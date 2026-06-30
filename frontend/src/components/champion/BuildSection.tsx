@@ -1,70 +1,100 @@
-import { Package } from 'lucide-react'
-import type { ChampionBuild, ItemBuild } from '../../types'
+import { ChevronRight, Package } from 'lucide-react'
+import type { BuildSet, ChampionBuild, ItemBuild } from '../../types'
 import EmptyState from './EmptyState'
 
 interface Props { build: ChampionBuild }
 
 function winColor(wr: number) {
   if (wr >= 0.53) return '#34d399'
-  if (wr >= 0.50) return '#fbbf24'
+  if (wr >= 0.50) return '#f0c84d'
   return '#f87171'
 }
 
-function ItemIcon({ item }: { item: ItemBuild }) {
+function WR({ value }: { value: number }) {
+  return <span className="font-mono text-xs font-black" style={{ color: winColor(value) }}>{(value * 100).toFixed(1)}%</span>
+}
+
+function ItemIcon({ item, size = 'md' }: { item: ItemBuild; size?: 'sm' | 'md' }) {
+  const dim = size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'
   if (!item.item) return (
-    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <Package className="w-4 h-4 text-gray-700" />
+    <div className={`${dim} flex shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.035]`}>
+      <Package className="h-4 w-4 text-slate-700" />
     </div>
   )
   return (
-    <div className="relative group shrink-0">
+    <div className="group relative shrink-0">
       <img src={item.item.imageUrl} alt={item.item.name}
-           className="w-10 h-10 rounded-xl object-cover transition-transform duration-200 group-hover:scale-110"
-           style={{ border: '1px solid rgba(255,255,255,0.1)' }} />
-      {/* Tooltip */}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
-        <div className="rounded-xl px-3 py-2 text-xs whitespace-nowrap"
-             style={{ background: 'rgba(13,17,23,0.98)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)' }}>
-          <div className="font-semibold text-gold-400 mb-0.5">{item.item.name}</div>
-          <div className="text-gray-500">{item.item.gold.toLocaleString()}g</div>
-          <div className="font-mono" style={{ color: winColor(item.winRate) }}>{(item.winRate * 100).toFixed(1)}% WR</div>
+           className={`${dim} rounded-md border border-white/10 object-cover transition duration-150 group-hover:scale-110 group-hover:border-gold-300/45`} />
+      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden -translate-x-1/2 group-hover:block">
+        <div className="rounded-md border border-gold-400/20 bg-[#080d17]/98 px-3 py-2 text-xs shadow-2xl backdrop-blur-xl">
+          <div className="whitespace-nowrap font-bold text-gold-300">{item.item.name}</div>
+          <div className="mt-0.5 text-slate-500">{item.item.gold.toLocaleString()}g</div>
+          <div className="mt-0.5"><WR value={item.winRate} /> <span className="text-slate-600">WR</span></div>
         </div>
       </div>
     </div>
   )
 }
 
-function WR({ value }: { value: number }) {
-  return <span className="font-mono text-xs font-semibold" style={{ color: winColor(value) }}>{(value * 100).toFixed(1)}%</span>
+function ItemStrip({ title, items }: { title: string; items: ItemBuild[] }) {
+  if (!items?.length) return null
+  return (
+    <div className="rift-panel p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="rift-section-title">{title}</div>
+        <span className="text-xs text-slate-600">Most common</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {items.slice(0, 8).map((item, i) => (
+          <div key={`${item.itemId}-${i}`} className="flex items-center gap-2">
+            <ItemIcon item={item} />
+            {i < Math.min(items.length, 8) - 1 && <ChevronRight className="h-4 w-4 text-slate-700" />}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PopularBuild({ buildSet }: { buildSet: BuildSet }) {
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-white/[0.07] bg-white/[0.025] p-3">
+      <div className="flex flex-1 flex-wrap items-center gap-1.5">
+        {buildSet.items.slice(0, 6).map((item, i) => (
+          <ItemIcon key={`${item.itemId}-${i}`} item={item} size="sm" />
+        ))}
+      </div>
+      <div className="text-right">
+        <WR value={buildSet.winRate} />
+        <div className="mt-1 font-mono text-xs text-slate-600">{buildSet.games.toLocaleString()} games</div>
+      </div>
+    </div>
+  )
 }
 
 export default function BuildSection({ build }: Props) {
   const hasItems = build.coreItems?.length > 0
 
   return (
-    <div className="space-y-3">
-
-      {/* Spells + Skill order row */}
+    <div className="space-y-4">
       {(build.summonerSpells?.length > 0 || build.skillOrder?.maxOrder?.length > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {build.summonerSpells?.length > 0 && (
-            <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(17,24,39,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="rift-panel">
               <div className="panel-header"><span className="panel-title">Summoner Spells</span></div>
-              <div className="p-4 flex flex-wrap gap-4">
+              <div className="grid gap-2 p-4 sm:grid-cols-3">
                 {build.summonerSpells.slice(0, 3).map((ss, i) => (
-                  <div key={i} className="flex items-center gap-2.5">
+                  <div key={i} className="flex items-center gap-3 rounded-md border border-white/[0.07] bg-white/[0.025] p-3">
                     <div className="flex gap-1.5">
                       {[ss.spell1, ss.spell2].map((spell, j) => (
                         spell.imageUrl
-                          ? <img key={j} src={spell.imageUrl} alt={spell.name} className="w-9 h-9 rounded-xl border border-white/10" />
-                          : <div key={j} className="w-9 h-9 rounded-xl border border-white/10 bg-surface-2 flex items-center justify-center text-[10px] text-gray-600">{spell.id}</div>
+                          ? <img key={j} src={spell.imageUrl} alt={spell.name} className="h-9 w-9 rounded-md border border-white/10" />
+                          : <div key={j} className="flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-[10px] text-slate-600">{spell.id}</div>
                       ))}
                     </div>
                     <div>
                       <WR value={ss.winRate} />
-                      <div className="text-[10px] text-gray-600 mt-0.5">{(ss.pickRate * 100).toFixed(0)}% pick</div>
+                      <div className="mt-0.5 text-[10px] font-bold uppercase text-slate-600">{(ss.pickRate * 100).toFixed(0)}% pick</div>
                     </div>
                   </div>
                 ))}
@@ -73,32 +103,31 @@ export default function BuildSection({ build }: Props) {
           )}
 
           {build.skillOrder?.maxOrder?.length > 0 && (
-            <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(17,24,39,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="rift-panel">
               <div className="panel-header"><span className="panel-title">Skill Max Order</span></div>
-              <div className="p-4 flex items-center gap-2">
-                <span className="text-xs text-gray-600 shrink-0">Max</span>
-                <div className="flex items-center gap-2">
-                  {build.skillOrder.maxOrder.map((skill, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className={`skill-badge skill-${skill}`}>{skill}</span>
-                      {i < build.skillOrder.maxOrder.length - 1 && (
-                        <span className="text-gray-700 text-xs">→</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div className="flex flex-wrap items-center gap-2 p-4">
+                {build.skillOrder.maxOrder.map((skill, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className={`skill-badge skill-${skill}`}>{skill}</span>
+                    {i < build.skillOrder.maxOrder.length - 1 && <ChevronRight className="h-4 w-4 text-slate-700" />}
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Core items table */}
-      <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(17,24,39,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ItemStrip title="Starter Items" items={build.starterItems ?? []} />
+        <ItemStrip title="Boot Options" items={build.bootItems ?? []} />
+      </div>
+
+      <div className="rift-panel">
         <div className="panel-header">
           <span className="panel-title">Core Items</span>
           {build.sampleSize > 0 && (
-            <span className="ml-auto text-xs text-gray-700">{build.sampleSize.toLocaleString()} games</span>
+            <span className="ml-auto text-xs text-slate-600">{build.sampleSize.toLocaleString()} games</span>
           )}
         </div>
 
@@ -106,27 +135,27 @@ export default function BuildSection({ build }: Props) {
           <EmptyState />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <tr className="border-b border-white/[0.06] bg-white/[0.025]">
                   {['#', 'Item', 'Win Rate', 'Pick Rate', 'Games'].map((h, i) => (
-                    <th key={h} className={`py-2.5 px-4 text-xs text-gray-600 font-medium ${i > 1 ? 'text-right' : i === 0 ? 'w-8' : 'text-left'}`}>{h}</th>
+                    <th key={h} className={`px-4 py-3 text-xs font-bold uppercase text-slate-600 ${i > 1 ? 'text-right' : i === 0 ? 'w-10 text-center' : 'text-left'}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {build.coreItems.map((item, i) => (
-                  <tr key={item.itemId} className="data-row">
-                    <td className="py-3 px-4 text-xs text-gray-700 font-mono">{i + 1}</td>
-                    <td className="py-3 px-4">
+                  <tr key={`${item.itemId}-${i}`} className="data-row">
+                    <td className="px-4 py-3 text-center font-mono text-xs font-bold text-slate-600">{i + 1}</td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <ItemIcon item={item} />
-                        <span className="text-sm text-gray-300">{item.item?.name ?? `Item ${item.itemId}`}</span>
+                        <span className="text-sm font-semibold text-slate-300">{item.item?.name ?? `Item ${item.itemId}`}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-right"><WR value={item.winRate} /></td>
-                    <td className="py-3 px-4 text-right text-xs text-gray-500 font-mono">{(item.pickRate * 100).toFixed(1)}%</td>
-                    <td className="py-3 px-4 text-right text-xs text-gray-700 font-mono">{item.games.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right"><WR value={item.winRate} /></td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-slate-500">{(item.pickRate * 100).toFixed(1)}%</td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-slate-600">{item.games.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -134,6 +163,18 @@ export default function BuildSection({ build }: Props) {
           </div>
         )}
       </div>
+
+      {build.popularBuilds?.length > 0 && (
+        <div className="rift-panel p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="rift-section-title">Full Build Paths</div>
+            <span className="text-xs text-slate-600">Top builds</span>
+          </div>
+          <div className="grid gap-2 lg:grid-cols-2">
+            {build.popularBuilds.slice(0, 4).map((set, i) => <PopularBuild key={i} buildSet={set} />)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

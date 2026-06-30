@@ -1,30 +1,40 @@
-import { HelpCircle } from 'lucide-react'
+import { HelpCircle, Sparkles } from 'lucide-react'
 import type { RuneBuild, Rune } from '../../types'
 import EmptyState from './EmptyState'
 
 interface Props { runes: RuneBuild }
 
-function RuneIcon({ rune, size = 'md', active = true }: { rune: Rune; size?: 'sm' | 'md'; active?: boolean }) {
-  const sz = size === 'sm' ? 'w-6 h-6' : 'w-10 h-10'
+function RuneIcon({ rune, size = 'md' }: { rune: Rune; size?: 'sm' | 'md' }) {
+  const sz = size === 'sm' ? 'h-7 w-7' : 'h-11 w-11'
   return (
     <div className="group relative">
       {rune.imageUrl ? (
         <img src={rune.imageUrl} alt={rune.name} loading="lazy"
-             className={`${sz} rounded-full transition-all duration-200 ${active ? 'opacity-100' : 'opacity-25 grayscale'}`}
-             style={{ border: active ? '1px solid rgba(200,155,60,0.3)' : '1px solid rgba(255,255,255,0.06)' }} />
+             className={`${sz} rounded-full border border-gold-400/30 bg-slate-950 p-0.5 transition duration-150 group-hover:scale-110 group-hover:border-gold-300/70`} />
       ) : (
-        <div className={`${sz} rounded-full border border-white/10 bg-surface-2 flex items-center justify-center`}>
-          <HelpCircle className="w-3 h-3 text-gray-700" />
+        <div className={`${sz} flex items-center justify-center rounded-full border border-white/10 bg-white/[0.03]`}>
+          <HelpCircle className="h-3.5 w-3.5 text-slate-700" />
         </div>
       )}
       {rune.name && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 pointer-events-none">
-          <div className="rounded-xl px-2.5 py-1.5 text-xs whitespace-nowrap"
-               style={{ background: 'rgba(13,17,23,0.98)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)' }}>
-            <div className="font-semibold text-gold-400">{rune.name}</div>
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden -translate-x-1/2 group-hover:block">
+          <div className="whitespace-nowrap rounded-md border border-gold-400/20 bg-[#080d17]/98 px-2.5 py-1.5 text-xs font-bold text-gold-300 shadow-2xl backdrop-blur-xl">
+            {rune.name}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function PathHeader({ icon, name, label, primary = false }: { icon?: string; name: string; label: string; primary?: boolean }) {
+  return (
+    <div className="mb-4 flex items-center gap-2">
+      {icon ? <img src={icon} alt={name} className="h-8 w-8" /> : <Sparkles className="h-5 w-5 text-slate-600" />}
+      <div>
+        <div className={primary ? 'text-sm font-black text-gold-300' : 'text-sm font-black text-slate-200'}>{name}</div>
+        <div className="text-xs font-bold uppercase text-slate-600">{label}</div>
+      </div>
     </div>
   )
 }
@@ -33,12 +43,13 @@ export default function RunePage({ runes }: Props) {
   const hasData = runes.sampleSize > 0
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(17,24,39,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
+    <div className="rift-panel">
       <div className="panel-header">
+        <Sparkles className="h-4 w-4 text-gold-400" />
         <span className="panel-title">Rune Page</span>
         {hasData && (
-          <div className="ml-auto flex items-center gap-3 text-xs text-gray-600">
-            <span className="font-mono font-semibold text-emerald-400">{(runes.winRate * 100).toFixed(1)}%</span>
+          <div className="ml-auto flex items-center gap-3 text-xs font-semibold text-slate-600">
+            <span className="font-mono font-black text-emerald-300">{(runes.winRate * 100).toFixed(1)}% WR</span>
             <span>{runes.sampleSize.toLocaleString()} games</span>
           </div>
         )}
@@ -48,54 +59,34 @@ export default function RunePage({ runes }: Props) {
         <EmptyState message="Rune data is being collected from ranked matches." showTrigger={false} />
       ) : (
         <div className="p-5">
-          <div className="flex flex-col sm:flex-row gap-8">
-            {/* Primary */}
+          <div className="grid gap-6 lg:grid-cols-[1fr_1fr_auto]">
             {runes.primaryPath?.name && (
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-4">
-                  {runes.primaryPath.iconUrl && (
-                    <img src={runes.primaryPath.iconUrl} alt={runes.primaryPath.name} className="w-7 h-7" />
-                  )}
-                  <span className="text-sm font-semibold text-gold-400">{runes.primaryPath.name}</span>
-                  <span className="text-xs text-gray-600">Primary</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
+              <div className="rounded-md border border-white/[0.07] bg-white/[0.025] p-4">
+                <PathHeader icon={runes.primaryPath.iconUrl} name={runes.primaryPath.name} label="Primary Path" primary />
+                <div className="flex flex-wrap gap-3">
                   {(runes.primaryRunes ?? []).map(r => <RuneIcon key={r.id} rune={r} />)}
                 </div>
               </div>
             )}
 
-            {/* Divider */}
-            {runes.primaryPath?.name && runes.secondaryPath?.name && (
-              <div className="hidden sm:block w-px self-stretch" style={{ background: 'rgba(255,255,255,0.04)' }} />
+            {runes.secondaryPath?.name && (
+              <div className="rounded-md border border-white/[0.07] bg-white/[0.025] p-4">
+                <PathHeader icon={runes.secondaryPath.iconUrl} name={runes.secondaryPath.name} label="Secondary Path" />
+                <div className="flex flex-wrap gap-3">
+                  {(runes.secondaryRunes ?? []).map(r => <RuneIcon key={r.id} rune={r} />)}
+                </div>
+              </div>
             )}
 
-            {/* Secondary */}
-            {runes.secondaryPath?.name && (
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-4">
-                  {runes.secondaryPath.iconUrl && (
-                    <img src={runes.secondaryPath.iconUrl} alt={runes.secondaryPath.name} className="w-7 h-7" />
-                  )}
-                  <span className="text-sm font-semibold text-gray-300">{runes.secondaryPath.name}</span>
-                  <span className="text-xs text-gray-600">Secondary</span>
-                </div>
+            {runes.shards?.length > 0 && (
+              <div className="rounded-md border border-white/[0.07] bg-white/[0.025] p-4">
+                <div className="mb-4 text-xs font-black uppercase text-slate-600">Stat Shards</div>
                 <div className="flex flex-wrap gap-2">
-                  {(runes.secondaryRunes ?? []).map(r => <RuneIcon key={r.id} rune={r} size="md" />)}
+                  {runes.shards.map((s, i) => <RuneIcon key={i} rune={s} size="sm" />)}
                 </div>
               </div>
             )}
           </div>
-
-          {/* Shards */}
-          {runes.shards?.length > 0 && (
-            <div className="mt-5 pt-5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-              <div className="text-xs text-gray-600 uppercase tracking-wider mb-2.5">Stat Shards</div>
-              <div className="flex gap-2">
-                {runes.shards.map((s, i) => <RuneIcon key={i} rune={s} size="sm" />)}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

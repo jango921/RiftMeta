@@ -72,9 +72,9 @@ export async function fetchChampionCounters(
   return data
 }
 
-export async function fetchMetaTop(region?: string): Promise<MetaTop> {
+export async function fetchMetaTop(region?: string, role?: string): Promise<MetaTop> {
   const { data } = await api.get<MetaTop>('/meta/top', {
-    params: { region },
+    params: { region, role },
   })
   return data
 }

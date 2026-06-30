@@ -1,62 +1,69 @@
+import { Ban, Crosshair, Database, Trophy } from 'lucide-react'
 import type { ChampionStats } from '../../types'
 
 interface Props { stats: ChampionStats }
 
 function winColor(wr: number) {
-  if (wr >= 0.53) return { text: '#34d399', bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.15)' }
-  if (wr >= 0.50) return { text: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  border: 'rgba(251,191,36,0.15)' }
-  if (wr >= 0.47) return { text: '#9ca3af', bg: 'rgba(156,163,175,0.05)', border: 'rgba(156,163,175,0.1)' }
-  return               { text: '#f87171', bg: 'rgba(248,113,113,0.08)',  border: 'rgba(248,113,113,0.15)' }
+  if (wr >= 0.53) return '#34d399'
+  if (wr >= 0.50) return '#f0c84d'
+  if (wr >= 0.47) return '#cbd5e1'
+  return '#f87171'
 }
 
-interface CardProps { label: string; value: string; sub?: string; accent: { text: string; bg: string; border: string } }
+interface CardProps {
+  label: string
+  value: string
+  sub?: string
+  color: string
+  icon: typeof Trophy
+}
 
-function StatCard({ label, value, sub, accent }: CardProps) {
+function StatCard({ label, value, sub, color, icon: Icon }: CardProps) {
   return (
-    <div className="relative rounded-2xl p-4 overflow-hidden transition-all duration-300 hover:-translate-y-0.5"
-         style={{ background: 'rgba(17,24,39,0.6)', border: `1px solid ${accent.border}`, boxShadow: `0 4px 20px rgba(0,0,0,0.3)` }}>
-      {/* Subtle background tint */}
-      <div className="absolute inset-0 rounded-2xl" style={{ background: accent.bg, opacity: 0.5 }} />
-      <div className="relative z-10">
-        <div className="text-xs text-gray-600 uppercase tracking-wider font-medium mb-2">{label}</div>
-        <div className="text-2xl font-black font-mono tracking-tight" style={{ color: accent.text }}>{value}</div>
-        {sub && <div className="text-xs text-gray-600 mt-1.5">{sub}</div>}
+    <div className="rift-panel p-4 transition duration-150 hover:-translate-y-0.5 hover:border-gold-300/25">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs font-black uppercase text-slate-600">{label}</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/[0.03]">
+          <Icon className="h-4 w-4" style={{ color }} />
+        </span>
       </div>
+      <div className="font-mono text-3xl font-black tracking-tight" style={{ color }}>{value}</div>
+      {sub && <div className="mt-1.5 text-xs font-semibold text-slate-600">{sub}</div>}
     </div>
   )
 }
 
 export default function StatsCards({ stats }: Props) {
-  const hasData  = stats.sampleSize > 0
-  const wrColors = hasData ? winColor(stats.winRate) : { text: '#374151', bg: 'transparent', border: 'rgba(255,255,255,0.05)' }
-  const blue     = { text: '#60a5fa', bg: 'rgba(96,165,250,0.06)',  border: 'rgba(96,165,250,0.12)' }
-  const red      = { text: '#f87171', bg: 'rgba(248,113,113,0.06)', border: 'rgba(248,113,113,0.1)' }
-  const purple   = { text: '#a78bfa', bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.1)' }
+  const hasData = stats.sampleSize > 0
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <StatCard
         label="Win Rate"
-        value={hasData ? `${(stats.winRate * 100).toFixed(1)}%` : '—'}
-        sub={hasData ? `${stats.wins.toLocaleString()}W · ${stats.losses.toLocaleString()}L` : 'Collecting data'}
-        accent={wrColors}
+        value={hasData ? `${(stats.winRate * 100).toFixed(1)}%` : '-'}
+        sub={hasData ? `${stats.wins.toLocaleString()}W / ${stats.losses.toLocaleString()}L` : 'Collecting data'}
+        color={hasData ? winColor(stats.winRate) : '#475569'}
+        icon={Trophy}
       />
       <StatCard
         label="Pick Rate"
-        value={hasData ? `${(stats.pickRate * 100).toFixed(1)}%` : '—'}
+        value={hasData ? `${(stats.pickRate * 100).toFixed(1)}%` : '-'}
         sub={hasData ? `${stats.games.toLocaleString()} games` : undefined}
-        accent={blue}
+        color="#60a5fa"
+        icon={Crosshair}
       />
       <StatCard
         label="Ban Rate"
-        value={hasData ? `${(stats.banRate * 100).toFixed(1)}%` : '—'}
-        accent={red}
+        value={hasData ? `${(stats.banRate * 100).toFixed(1)}%` : '-'}
+        color="#f87171"
+        icon={Ban}
       />
       <StatCard
         label="Sample"
-        value={hasData ? stats.sampleSize.toLocaleString() : '—'}
+        value={hasData ? stats.sampleSize.toLocaleString() : '-'}
         sub={hasData ? `Patch ${stats.patch}` : 'Worker needs to run'}
-        accent={purple}
+        color="#0ac8b9"
+        icon={Database}
       />
     </div>
   )

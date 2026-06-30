@@ -72,10 +72,10 @@ func (h *Handler) PingRiotAPI(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"ok":           true,
-		"version":      version,
-		"region":       region,
-		"challengers":  len(league.Entries),
+		"ok":          true,
+		"version":     version,
+		"region":      region,
+		"challengers": len(league.Entries),
 	})
 }
 
@@ -335,10 +335,10 @@ type storedRuneData struct {
 // shardMeta maps stat shard IDs to display info. IDs and icons are fixed in the game client.
 var shardMeta = map[int]struct{ name, icon string }{
 	5008: {"Adaptive Force", "perk-images/StatMods/StatModsAdaptiveForceIcon.png"},
-	5005: {"Attack Speed",   "perk-images/StatMods/StatModsAttackSpeedIcon.png"},
-	5007: {"Ability Haste",  "perk-images/StatMods/StatModsCDRScalingIcon.png"},
-	5002: {"Armor",          "perk-images/StatMods/StatModsArmorIcon.png"},
-	5003: {"Magic Resist",   "perk-images/StatMods/StatModsMagicResIcon.png"},
+	5005: {"Attack Speed", "perk-images/StatMods/StatModsAttackSpeedIcon.png"},
+	5007: {"Ability Haste", "perk-images/StatMods/StatModsCDRScalingIcon.png"},
+	5002: {"Armor", "perk-images/StatMods/StatModsArmorIcon.png"},
+	5003: {"Magic Resist", "perk-images/StatMods/StatModsMagicResIcon.png"},
 	5001: {"Health Scaling", "perk-images/StatMods/StatModsHealthScalingIcon.png"},
 }
 

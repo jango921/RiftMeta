@@ -28,42 +28,43 @@ export default function EmptyState({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-      <Database className="w-10 h-10 text-gray-700 mb-3" />
-      <p className="text-sm text-gray-500 max-w-xs">{message}</p>
-      <p className="text-xs text-gray-600 mt-1 mb-4">
+    <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+      <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-md border border-white/10 bg-white/[0.03]">
+        <Database className="h-5 w-5 text-slate-600" />
+      </span>
+      <p className="max-w-xs text-sm font-semibold text-slate-400">{message}</p>
+      <p className="mb-4 mt-1 text-xs text-slate-600">
         The background worker processes ranked matches to generate stats.
       </p>
 
       {showTrigger && state === 'idle' && (
         <button
           onClick={handleTrigger}
-          className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded border border-gold-500/40
-                     text-gold-400 hover:bg-gold-500/10 transition-colors"
+          className="btn-ghost text-xs"
         >
-          <RefreshCw className="w-3.5 h-3.5" />
+          <RefreshCw className="h-3.5 w-3.5" />
           Trigger data collection now
         </button>
       )}
 
       {state === 'loading' && (
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-          Starting worker…
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          Starting worker...
         </div>
       )}
 
       {state === 'started' && (
         <div className="flex items-center gap-2 text-xs text-emerald-400">
-          <CheckCircle className="w-3.5 h-3.5" />
-          Worker started — check back in a few minutes.
+          <CheckCircle className="h-3.5 w-3.5" />
+          Worker started - check back in a few minutes.
         </div>
       )}
 
       {state === 'running' && (
         <div className="flex items-center gap-2 text-xs text-yellow-400">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-          Worker is already running — data will appear soon.
+          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          Worker is already running - data will appear soon.
         </div>
       )}
 
