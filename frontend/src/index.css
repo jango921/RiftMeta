@@ -1,111 +1,184 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
-    color-scheme: dark;
-  }
+  :root { color-scheme: dark; }
 
-  * {
-    box-sizing: border-box;
-  }
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
 
   body {
-    @apply bg-rift-dark text-gray-100 font-body antialiased;
-    background-image:
-      radial-gradient(ellipse at 20% 0%, rgba(26, 58, 122, 0.15) 0%, transparent 60%),
-      radial-gradient(ellipse at 80% 100%, rgba(123, 43, 226, 0.08) 0%, transparent 60%);
+    @apply bg-surface-1 text-gray-100 font-body antialiased;
+    background-image: var(--tw-bg-aurora, none);
     min-height: 100vh;
   }
 
-  html {
-    scroll-behavior: smooth;
+  ::selection {
+    background: rgba(200,155,60,0.3);
+    color: #fff;
   }
 }
 
 @layer components {
-  .panel {
-    @apply bg-rift-panel border border-rift-border rounded-lg shadow-panel;
+
+  /* ---- Glass panels ---- */
+  .glass {
+    background: rgba(13,17,23,0.7);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: var(--tw-shadow-panel, 0 4px 24px rgba(0,0,0,0.5));
   }
 
+  .glass-gold {
+    background: rgba(13,17,23,0.75);
+    backdrop-filter: blur(20px) saturate(200%);
+    -webkit-backdrop-filter: blur(20px) saturate(200%);
+    border: 1px solid rgba(200,155,60,0.18);
+    box-shadow: 0 0 0 1px rgba(200,155,60,0.05) inset, 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  /* Legacy alias – keep existing code working */
+  .panel { @apply glass rounded-2xl overflow-hidden; }
   .panel-header {
-    @apply px-5 py-3 border-b border-rift-border flex items-center gap-2;
+    @apply px-5 py-3.5 flex items-center gap-2.5;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
   }
-
   .panel-title {
-    @apply font-display text-gold-400 text-sm font-semibold uppercase tracking-widest;
+    @apply font-display text-gold-500 text-xs font-semibold uppercase tracking-[0.12em];
   }
 
-  .gold-text {
-    @apply text-gold-400;
+  /* ---- Bento card ---- */
+  .bento {
+    @apply relative rounded-3xl overflow-hidden transition-all duration-500;
+    background: rgba(17,24,39,0.6);
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: var(--tw-shadow-card);
+  }
+  .bento:hover {
+    box-shadow: var(--tw-shadow-card-hover);
+    border-color: rgba(200,155,60,0.12);
+    transform: translateY(-2px);
+  }
+  .bento::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--tw-bg-card-shine);
+    pointer-events: none;
+    z-index: 0;
   }
 
-  .gold-gradient {
-    @apply bg-gold-shimmer bg-clip-text text-transparent;
-  }
-
-  .stat-pill {
-    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold;
-  }
-
-  .win-rate-good  { @apply text-emerald-400; }
-  .win-rate-avg   { @apply text-gray-300; }
-  .win-rate-bad   { @apply text-red-400; }
-
+  /* ---- Buttons ---- */
   .btn-primary {
-    @apply px-4 py-2 bg-gold-500 hover:bg-gold-400 text-navy-900 font-semibold rounded
-           transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-gold-400/50;
+    @apply relative inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm
+           transition-all duration-200 overflow-hidden;
+    background: linear-gradient(135deg, #C89B3C, #e8b319, #C89B3C);
+    background-size: 200% 100%;
+    color: #080C14;
+    box-shadow: 0 4px 16px rgba(200,155,60,0.3);
   }
+  .btn-primary:hover {
+    background-position: right center;
+    box-shadow: 0 6px 24px rgba(200,155,60,0.45);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active { transform: translateY(0); }
 
   .btn-ghost {
-    @apply px-4 py-2 border border-rift-border hover:border-gold-500/50 text-gray-300
-           hover:text-gold-400 rounded transition-colors duration-150;
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
+           border border-white/10 text-gray-400 hover:text-white hover:border-white/20
+           transition-all duration-200 hover:bg-white/5;
   }
 
+  /* ---- Role pill ---- */
   .role-btn {
-    @apply px-3 py-1.5 rounded text-xs font-semibold border border-rift-border
-           hover:border-gold-500 hover:text-gold-400 transition-colors duration-150;
+    @apply px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/10
+           text-gray-500 hover:text-gray-200 hover:border-white/20 hover:bg-white/5
+           transition-all duration-150;
   }
-
   .role-btn-active {
-    @apply bg-gold-500/20 border-gold-500 text-gold-400;
+    @apply border-gold-500/40 text-gold-400;
+    background: rgba(200,155,60,0.08);
+    box-shadow: 0 0 12px rgba(200,155,60,0.1);
   }
 
+  /* ---- Skill badge ---- */
   .skill-badge {
-    @apply w-8 h-8 rounded flex items-center justify-center text-sm font-bold
-           border border-rift-border bg-rift-dark;
+    @apply w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold
+           border transition-all duration-150;
+  }
+  .skill-Q { @apply border-blue-500/40  text-blue-400  bg-blue-950/40; }
+  .skill-W { @apply border-teal-500/40  text-teal-400  bg-teal-950/40; }
+  .skill-E { @apply border-purple-500/40 text-purple-400 bg-purple-950/40; }
+  .skill-R { @apply border-yellow-500/40 text-yellow-400 bg-yellow-950/40; }
+
+  /* ---- Stat chip ---- */
+  .stat-value-good { @apply text-emerald-400; }
+  .stat-value-avg  { @apply text-gray-300; }
+  .stat-value-bad  { @apply text-red-400; }
+
+  /* ---- Shimmer loading ---- */
+  .shimmer-line {
+    @apply rounded-lg bg-surface-3 relative overflow-hidden;
+  }
+  .shimmer-line::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+    animation: shimmer 1.8s infinite;
   }
 
-  .skill-Q { @apply border-blue-500/60 text-blue-400 bg-blue-900/20; }
-  .skill-W { @apply border-teal-500/60 text-teal-400 bg-teal-900/20; }
-  .skill-E { @apply border-purple-500/60 text-purple-400 bg-purple-900/20; }
-  .skill-R { @apply border-yellow-500/60 text-yellow-400 bg-yellow-900/20; }
+  /* ---- Table rows ---- */
+  .data-row {
+    @apply border-b border-white/[0.04] transition-colors duration-100;
+  }
+  .data-row:hover { background: rgba(255,255,255,0.025); }
+  .data-row:last-child { @apply border-0; }
+
+  /* ---- Glow text ---- */
+  .text-glow-gold {
+    text-shadow: 0 0 20px rgba(200,155,60,0.5), 0 0 40px rgba(200,155,60,0.2);
+  }
+  .text-glow-teal {
+    text-shadow: 0 0 20px rgba(10,200,185,0.5);
+  }
+
+  /* ---- Gradient text ---- */
+  .gradient-gold {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #e8b319 0%, #C89B3C 50%, #f0c84d 100%);
+  }
+  .gradient-aurora {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #C89B3C 0%, #0AC8B9 50%, #7B2BE2 100%);
+  }
 }
 
 @layer utilities {
-  .text-shadow-gold {
-    text-shadow: 0 0 20px rgba(200, 155, 60, 0.5);
-  }
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #1e2d3d transparent;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
   }
-
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #1e2d3d;
+    background: rgba(255,255,255,0.08);
     border-radius: 2px;
+  }
+
+  /* Force GPU layer for smooth animations */
+  .gpu { transform: translateZ(0); will-change: transform; }
+
+  .border-shine {
+    border-image: linear-gradient(135deg, rgba(200,155,60,0.4), rgba(10,200,185,0.2), rgba(123,43,226,0.3)) 1;
   }
 }

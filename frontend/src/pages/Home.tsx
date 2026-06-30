@@ -7,12 +7,9 @@ import ChampionCard from '../components/common/ChampionCard'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 
 export default function Home() {
-  const { data: version = '' } = useQuery({
-    queryKey: ['version'],
-    queryFn: fetchVersion,
-  })
+  const { data: version = '' } = useQuery({ queryKey: ['version'], queryFn: fetchVersion })
 
-  const { data: champions = [], isLoading: champsLoading } = useQuery({
+  const { data: champions = [], isLoading } = useQuery({
     queryKey: ['champions'],
     queryFn: fetchChampions,
     staleTime: 30 * 60 * 1000,
@@ -24,62 +21,76 @@ export default function Home() {
     staleTime: 15 * 60 * 1000,
   })
 
-  // Popular champions (first 24 alphabetically)
-  const popularChamps = [...champions]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, 24)
+  const sorted = [...champions].sort((a, b) => a.name.localeCompare(b.name))
+  const featured = sorted.slice(0, 3)
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      {/* Hero search */}
-      <SearchHero champions={champions} version={version} />
+    <div style={{ background: '#080C14', minHeight: '100vh' }}>
+      {/* Aurora background */}
+      <div className="fixed inset-0 pointer-events-none" style={{
+        background: 'radial-gradient(ellipse 80% 50% at 20% -10%, rgba(123,43,226,0.1) 0%, transparent 60%), radial-gradient(ellipse 60% 40% at 80% 110%, rgba(10,200,185,0.07) 0%, transparent 60%)'
+      }} />
 
-      {/* Worker status bar */}
-      <WorkerStatus />
+      <div className="relative z-10">
+        <SearchHero champions={champions} version={version} />
 
-      {/* Meta tier lists */}
-      {meta && (
-        <section className="mb-12">
-          <h2 className="font-display text-gold-400 text-lg font-semibold mb-4 uppercase tracking-wider">
-            Current Meta — Patch {meta.patch}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <TopChampions title="Top Win Rate" items={meta.topWinRate} />
-            <TopChampions title="Top Pick Rate" items={meta.topPickRate} />
-            <TopChampions title="Top Ban Rate"  items={meta.topBanRate} />
-          </div>
-        </section>
-      )}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 space-y-16">
 
-      {/* Champion grid */}
-      <section className="mb-16">
-        <h2 className="font-display text-gold-400 text-lg font-semibold mb-4 uppercase tracking-wider">
-          All Champions
-        </h2>
+          {/* Worker status */}
+          <WorkerStatus />
 
-        {champsLoading ? (
-          <LoadingSpinner size="lg" className="py-20" />
-        ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-            {popularChamps.map((champ) => (
-              <ChampionCard key={champ.id} champion={champ} showStats={false} size="sm" />
-            ))}
-          </div>
-        )}
+          {/* ---- Meta Tier List ---- */}
+          {meta && (
+            <section>
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="font-display text-sm font-semibold uppercase tracking-[0.15em] text-gray-500">
+                  Current Meta
+                  <span className="ml-3 text-gold-500">{meta.patch}</span>
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" style={{ height: '380px' }}>
+                <TopChampions title="Win Rate"  accent="#34d399" items={meta.topWinRate}  valueKey="winRate"  />
+                <TopChampions title="Pick Rate" accent="#60a5fa" items={meta.topPickRate} valueKey="pickRate" />
+                <TopChampions title="Ban Rate"  accent="#f87171" items={meta.topBanRate}  valueKey="banRate"  />
+              </div>
+            </section>
+          )}
 
-        {!champsLoading && champions.length > 24 && (
-          <div className="mt-4 text-center">
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 mt-2">
-              {[...champions]
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .slice(24)
-                .map((champ) => (
+          {/* ---- Featured champions bento ---- */}
+          {featured.length > 0 && (
+            <section>
+              <h2 className="font-display text-sm font-semibold uppercase tracking-[0.15em] text-gray-500 mb-5">
+                Featured Champions
+              </h2>
+              <div className="grid grid-cols-3 gap-3" style={{ height: '280px' }}>
+                {featured.map(champ => (
+                  <ChampionCard key={champ.id} champion={champ} featured showStats={false} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ---- All champions grid ---- */}
+          <section>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-sm font-semibold uppercase tracking-[0.15em] text-gray-500">
+                All Champions
+                <span className="ml-3 text-gray-700">{champions.length}</span>
+              </h2>
+            </div>
+
+            {isLoading ? (
+              <LoadingSpinner size="lg" className="py-20" />
+            ) : (
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2">
+                {sorted.map(champ => (
                   <ChampionCard key={champ.id} champion={champ} showStats={false} size="sm" />
                 ))}
-            </div>
-          </div>
-        )}
-      </section>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
     </div>
   )
 }
