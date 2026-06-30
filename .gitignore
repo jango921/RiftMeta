@@ -1,0 +1,26 @@
+# Environment variables — NEVER commit real API keys
+.env
+.env.local
+
+# Go
+backend/vendor/
+backend/*.exe
+backend/*.test
+backend/riftmeta-server
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
