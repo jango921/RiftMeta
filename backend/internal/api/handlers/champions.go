@@ -317,6 +317,39 @@ func (h *Handler) GetChampionBuilds(c *fiber.Ctx) error {
 	return c.JSON(build)
 }
 
+// storedRuneData mirrors the struct saved by the worker — used to parse the DB JSONB column.
+type storedRuneData struct {
+	Patch            string  `json:"patch"`
+	Role             string  `json:"role"`
+	Region           string  `json:"region"`
+	SampleSize       int     `json:"sampleSize"`
+	PrimaryPathID    int     `json:"primaryPathId"`
+	SecondaryPathID  int     `json:"secondaryPathId"`
+	PrimaryRuneIDs   []int   `json:"primaryRuneIds"`
+	SecondaryRuneIDs []int   `json:"secondaryRuneIds"`
+	ShardIDs         []int   `json:"shardIds"`
+	WinRate          float64 `json:"winRate"`
+	Games            int     `json:"games"`
+}
+
+// shardMeta maps stat shard IDs to display info. IDs and icons are fixed in the game client.
+var shardMeta = map[int]struct{ name, icon string }{
+	5008: {"Adaptive Force", "perk-images/StatMods/StatModsAdaptiveForceIcon.png"},
+	5005: {"Attack Speed",   "perk-images/StatMods/StatModsAttackSpeedIcon.png"},
+	5007: {"Ability Haste",  "perk-images/StatMods/StatModsCDRScalingIcon.png"},
+	5002: {"Armor",          "perk-images/StatMods/StatModsArmorIcon.png"},
+	5003: {"Magic Resist",   "perk-images/StatMods/StatModsMagicResIcon.png"},
+	5001: {"Health Scaling", "perk-images/StatMods/StatModsHealthScalingIcon.png"},
+}
+
+func statShardToRune(id int) models.Rune {
+	m, ok := shardMeta[id]
+	if !ok {
+		return models.Rune{ID: id, Name: fmt.Sprintf("Shard %d", id)}
+	}
+	return models.Rune{ID: id, Name: m.name, ImageURL: riot.RuneIconURL(m.icon)}
+}
+
 // GetChampionRunes returns aggregated rune data for a champion
 func (h *Handler) GetChampionRunes(c *fiber.Ctx) error {
 	ctx := c.Context()
@@ -349,16 +382,64 @@ func (h *Handler) GetChampionRunes(c *fiber.Ctx) error {
 	var runeJSON []byte
 	err := h.db.Pool.QueryRow(ctx, query, args...).Scan(&runeJSON)
 	if err != nil || len(runeJSON) == 0 {
-		return c.JSON(models.RuneBuild{
-			ChampionID: id,
-			Patch:      patch,
-			Role:       role,
-			Region:     region,
-		})
+		return c.JSON(models.RuneBuild{ChampionID: id, Patch: patch, Role: role, Region: region})
 	}
 
-	if err := json.Unmarshal(runeJSON, &runes); err != nil {
+	var stored storedRuneData
+	if err := json.Unmarshal(runeJSON, &stored); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "invalid rune data"})
+	}
+
+	// PrimaryPathID == 0 means the data was written in the old flat format — treat as empty.
+	if stored.PrimaryPathID == 0 {
+		return c.JSON(models.RuneBuild{ChampionID: id, Patch: patch, Role: role, Region: region})
+	}
+
+	runes = models.RuneBuild{
+		ChampionID: id,
+		Patch:      stored.Patch,
+		Role:       stored.Role,
+		Region:     stored.Region,
+		SampleSize: stored.SampleSize,
+		WinRate:    stored.WinRate,
+		Games:      stored.Games,
+	}
+
+	// Enrich with Data Dragon path and rune metadata
+	version, _ := h.getVersion(ctx)
+	if version != "" {
+		ddPaths, ddErr := h.riotClient.GetAllRunes(ctx, version)
+		if ddErr == nil {
+			pathByID := make(map[int]models.DataDragonRunePath, len(ddPaths))
+			runeByID := make(map[int]models.DataDragonRune)
+			for _, p := range ddPaths {
+				pathByID[p.ID] = p
+				for _, slot := range p.Slots {
+					for _, r := range slot.Runes {
+						runeByID[r.ID] = r
+					}
+				}
+			}
+			if p, ok := pathByID[stored.PrimaryPathID]; ok {
+				runes.PrimaryPath = models.RunePath{ID: p.ID, Key: p.Key, Name: p.Name, IconURL: riot.RuneIconURL(p.Icon)}
+			}
+			if p, ok := pathByID[stored.SecondaryPathID]; ok {
+				runes.SecondaryPath = models.RunePath{ID: p.ID, Key: p.Key, Name: p.Name, IconURL: riot.RuneIconURL(p.Icon)}
+			}
+			for _, rid := range stored.PrimaryRuneIDs {
+				if r, ok := runeByID[rid]; ok {
+					runes.PrimaryRunes = append(runes.PrimaryRunes, models.Rune{ID: r.ID, Key: r.Key, Name: r.Name, ImageURL: riot.RuneIconURL(r.Icon)})
+				}
+			}
+			for _, rid := range stored.SecondaryRuneIDs {
+				if r, ok := runeByID[rid]; ok {
+					runes.SecondaryRunes = append(runes.SecondaryRunes, models.Rune{ID: r.ID, Key: r.Key, Name: r.Name, ImageURL: riot.RuneIconURL(r.Icon)})
+				}
+			}
+			for _, sid := range stored.ShardIDs {
+				runes.Shards = append(runes.Shards, statShardToRune(sid))
+			}
+		}
 	}
 
 	h.cache.Set(ctx, cacheKey, runes, cache.TTLRunes)
@@ -417,8 +498,9 @@ func (h *Handler) GetChampionCounters(c *fiber.Ctx) error {
 func (h *Handler) GetMeta(c *fiber.Ctx) error {
 	ctx := c.Context()
 	region := c.Query("region", h.region)
+	role := c.Query("role", "")
 
-	cacheKey := fmt.Sprintf("meta:top:%s", region)
+	cacheKey := fmt.Sprintf("meta:top:%s:%s", region, role)
 	var meta models.MetaTop
 	if err := h.cache.Get(ctx, cacheKey, &meta); err == nil {
 		return c.JSON(meta)
@@ -426,62 +508,75 @@ func (h *Handler) GetMeta(c *fiber.Ctx) error {
 
 	version, _ := h.getVersion(ctx)
 	patch := patchFromVersion(version)
-
-	rows, err := h.db.Pool.Query(ctx, `
-		SELECT champion_id, SUM(wins), SUM(losses), SUM(games), SUM(bans), MAX(total_games)
-		FROM champion_stats
-		WHERE patch = $1 AND region = $2
-		GROUP BY champion_id
-		HAVING SUM(games) >= 50
-		ORDER BY SUM(wins)::float / NULLIF(SUM(games), 0) DESC
-		LIMIT 20`, patch, region)
-	if err != nil {
-		meta = models.MetaTop{Patch: patch, Region: region}
-		return c.JSON(meta)
-	}
-	defer rows.Close()
-
-	// Fetch champion list to enrich
 	allChamps, _ := h.riotClient.GetAllChampions(ctx, version)
 
-	for rows.Next() {
-		var champID string
-		var wins, losses, games, bans, totalGames int
-		if err := rows.Scan(&champID, &wins, &losses, &games, &bans, &totalGames); err != nil {
-			continue
+	topBy := func(orderBy string) []models.ChampionWithStats {
+		query := `
+		SELECT champion_id, SUM(wins), SUM(losses), SUM(games), SUM(bans), MAX(total_games)
+		FROM champion_stats
+		WHERE patch = $1 AND region = $2`
+		args := []any{patch, region}
+		if role != "" {
+			query += " AND role = $3"
+			args = append(args, role)
 		}
-		stats := models.ChampionStats{
-			ChampionID: champID,
-			Patch:      patch,
-			Region:     region,
-			Wins:       wins,
-			Losses:     losses,
-			Games:      games,
-			SampleSize: games,
-		}
-		if games > 0 {
-			stats.WinRate = float64(wins) / float64(games)
-		}
-		if totalGames > 0 {
-			stats.PickRate = float64(games) / float64(totalGames)
-			stats.BanRate = float64(bans) / float64(totalGames)
-		}
+		query += fmt.Sprintf(`
+		GROUP BY champion_id
+		HAVING SUM(games) >= 50
+		ORDER BY %s DESC
+		LIMIT 20`, orderBy)
 
-		var champ models.Champion
-		if dd, ok := allChamps[champID]; ok {
-			champ = ddToChampion(dd, version)
-		} else {
-			champ = models.Champion{ID: champID, Name: champID}
+		rows, err := h.db.Pool.Query(ctx, query, args...)
+		if err != nil {
+			return nil
 		}
+		defer rows.Close()
 
-		meta.TopWinRate = append(meta.TopWinRate, models.ChampionWithStats{
-			Champion: champ,
-			Stats:    stats,
-		})
+		var entries []models.ChampionWithStats
+		for rows.Next() {
+			var champID string
+			var wins, losses, games, bans, totalGames int
+			if err := rows.Scan(&champID, &wins, &losses, &games, &bans, &totalGames); err != nil {
+				continue
+			}
+			stats := models.ChampionStats{
+				ChampionID: champID,
+				Patch:      patch,
+				Region:     region,
+				Role:       role,
+				Wins:       wins,
+				Losses:     losses,
+				Games:      games,
+				SampleSize: games,
+			}
+			if games > 0 {
+				stats.WinRate = float64(wins) / float64(games)
+			}
+			if totalGames > 0 {
+				stats.PickRate = float64(games) / float64(totalGames)
+				stats.BanRate = float64(bans) / float64(totalGames)
+			}
+
+			var champ models.Champion
+			if dd, ok := allChamps[champID]; ok {
+				champ = ddToChampion(dd, version)
+			} else {
+				champ = models.Champion{ID: champID, Name: champID}
+			}
+
+			entries = append(entries, models.ChampionWithStats{
+				Champion: champ,
+				Stats:    stats,
+			})
+		}
+		return entries
 	}
 
 	meta.Patch = patch
 	meta.Region = region
+	meta.TopWinRate = topBy("SUM(wins)::float / NULLIF(SUM(games), 0)")
+	meta.TopPickRate = topBy("SUM(games)::float / NULLIF(MAX(total_games), 0)")
+	meta.TopBanRate = topBy("SUM(bans)::float / NULLIF(MAX(total_games), 0)")
 	h.cache.Set(ctx, cacheKey, meta, cache.TTLMeta)
 	return c.JSON(meta)
 }

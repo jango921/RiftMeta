@@ -237,7 +237,7 @@ func (w *Worker) persist(ctx context.Context, agg *aggregator, patch string) err
 				wins=EXCLUDED.wins, losses=EXCLUDED.losses, games=EXCLUDED.games,
 				bans=EXCLUDED.bans, total_games=EXCLUDED.total_games, updated_at=NOW()`,
 			championID, patch, role, w.region,
-			data.wins, data.losses, data.games, data.bans, agg.totalGames,
+			data.wins, data.losses, data.games, agg.banCounts[championID], agg.totalGames,
 		); err != nil {
 			w.log.Warn("persist stats", zap.String("champ", championID), zap.Error(err))
 		}
@@ -286,15 +286,20 @@ func (w *Worker) persist(ctx context.Context, agg *aggregator, patch string) err
 // ---- Aggregation types ----
 
 type champData struct {
-	wins       int
-	losses     int
-	games      int
-	bans       int
-	items      map[int]*winRate
-	spells     map[string]*winRate
-	runes      map[int]*winRate
-	counters   map[string]*winRate
+	wins    int
+	losses  int
+	games   int
+	bans    int
+	items   map[int]*winRate
+	spells  map[string]*winRate
+	counters map[string]*winRate
 	skillCasts [4]int
+	// Rune tracking (split by primary/secondary path)
+	primaryPaths   map[int]*winRate         // pathID → {wins, games}
+	secondaryPaths map[int]*winRate         // pathID → {wins, games}
+	primaryRunes   map[int]map[int]*winRate // primaryPathID → runeID → {wins, games}
+	secondaryRunes map[int]map[int]*winRate // secondaryPathID → runeID → {wins, games}
+	shards         [3]map[int]int           // slot[0,1,2] → shardID → count
 }
 
 type winRate struct{ wins, games int }
@@ -302,19 +307,27 @@ type winRate struct{ wins, games int }
 type aggregator struct {
 	champions  map[string]*champData
 	totalGames int
+	banCounts  map[string]int // championName → times banned
 }
 
 func newAggregator() *aggregator {
-	return &aggregator{champions: make(map[string]*champData)}
+	return &aggregator{
+		champions: make(map[string]*champData),
+		banCounts: make(map[string]int),
+	}
 }
 
 func (a *aggregator) getOrCreate(key string) *champData {
 	if a.champions[key] == nil {
 		a.champions[key] = &champData{
-			items:    make(map[int]*winRate),
-			spells:   make(map[string]*winRate),
-			runes:    make(map[int]*winRate),
-			counters: make(map[string]*winRate),
+			items:          make(map[int]*winRate),
+			spells:         make(map[string]*winRate),
+			counters:       make(map[string]*winRate),
+			primaryPaths:   make(map[int]*winRate),
+			secondaryPaths: make(map[int]*winRate),
+			primaryRunes:   make(map[int]map[int]*winRate),
+			secondaryRunes: make(map[int]map[int]*winRate),
+			shards:         [3]map[int]int{make(map[int]int), make(map[int]int), make(map[int]int)},
 		}
 	}
 	return a.champions[key]
@@ -326,6 +339,24 @@ func (a *aggregator) ingest(match *riot.MatchDTO, patch string) {
 		return
 	}
 	a.totalGames++
+
+	// Build championID → name map for ban lookup
+	champIDToName := make(map[int]string, len(match.Info.Participants))
+	for _, p := range match.Info.Participants {
+		champIDToName[p.ChampionID] = p.ChampionName
+	}
+
+	// Count bans (ChampionID -1 means no ban in that slot)
+	for _, team := range match.Info.Teams {
+		for _, ban := range team.Bans {
+			if ban.ChampionID <= 0 {
+				continue
+			}
+			if name, ok := champIDToName[ban.ChampionID]; ok && name != "" {
+				a.banCounts[name]++
+			}
+		}
+	}
 
 	for _, p := range match.Info.Participants {
 		role := normalizeRole(p.IndividualPosition)
@@ -364,20 +395,57 @@ func (a *aggregator) ingest(match *riot.MatchDTO, patch string) {
 			cd.spells[spellKey].wins++
 		}
 
-		// Runes
-		for _, style := range p.Perks.Styles {
-			for _, sel := range style.Selections {
-				if cd.runes[sel.Perk] == nil {
-					cd.runes[sel.Perk] = &winRate{}
+		// Runes — track by path so we can reconstruct primary/secondary correctly
+		if len(p.Perks.Styles) >= 1 {
+			pri := p.Perks.Styles[0]
+			pid := pri.Style
+			if cd.primaryPaths[pid] == nil {
+				cd.primaryPaths[pid] = &winRate{}
+			}
+			cd.primaryPaths[pid].games++
+			if p.Win {
+				cd.primaryPaths[pid].wins++
+			}
+			if cd.primaryRunes[pid] == nil {
+				cd.primaryRunes[pid] = make(map[int]*winRate)
+			}
+			for _, sel := range pri.Selections {
+				if cd.primaryRunes[pid][sel.Perk] == nil {
+					cd.primaryRunes[pid][sel.Perk] = &winRate{}
 				}
-				cd.runes[sel.Perk].games++
+				cd.primaryRunes[pid][sel.Perk].games++
 				if p.Win {
-					cd.runes[sel.Perk].wins++
+					cd.primaryRunes[pid][sel.Perk].wins++
+				}
+			}
+		}
+		if len(p.Perks.Styles) >= 2 {
+			sec := p.Perks.Styles[1]
+			sid := sec.Style
+			if cd.secondaryPaths[sid] == nil {
+				cd.secondaryPaths[sid] = &winRate{}
+			}
+			cd.secondaryPaths[sid].games++
+			if cd.secondaryRunes[sid] == nil {
+				cd.secondaryRunes[sid] = make(map[int]*winRate)
+			}
+			for _, sel := range sec.Selections {
+				if cd.secondaryRunes[sid][sel.Perk] == nil {
+					cd.secondaryRunes[sid][sel.Perk] = &winRate{}
+				}
+				cd.secondaryRunes[sid][sel.Perk].games++
+				if p.Win {
+					cd.secondaryRunes[sid][sel.Perk].wins++
 				}
 			}
 		}
 
-		// Skill casts
+		// Stat shards
+		cd.shards[0][p.Perks.StatPerks.Offense]++
+		cd.shards[1][p.Perks.StatPerks.Flex]++
+		cd.shards[2][p.Perks.StatPerks.Defense]++
+
+		// Skill casts (spell1Casts=Q, spell2Casts=W, spell3Casts=E, spell4Casts=R)
 		for i, v := range [4]int{p.Skill1Casts, p.Skill2Casts, p.Skill3Casts, p.Skill4Casts} {
 			cd.skillCasts[i] += v
 		}
@@ -488,36 +556,104 @@ func (cd *champData) toBuildData(patch, role, region string) models.ChampionBuil
 	}
 }
 
-// runeEntry is a flat rune record stored in the DB
-type runeEntry struct {
-	RuneID   int     `json:"runeId"`
-	StyleID  int     `json:"styleId"` // path ID (not tracked per-rune here; enriched client-side)
-	WinRate  float64 `json:"winRate"`
-	PickRate float64 `json:"pickRate"`
-	Games    int     `json:"games"`
+// storedRuneData is the format saved to champion_runes in the DB.
+// The handler enriches it with Data Dragon path/rune metadata before returning to the client.
+type storedRuneData struct {
+	Patch           string  `json:"patch"`
+	Role            string  `json:"role"`
+	Region          string  `json:"region"`
+	SampleSize      int     `json:"sampleSize"`
+	PrimaryPathID   int     `json:"primaryPathId"`
+	SecondaryPathID int     `json:"secondaryPathId"`
+	PrimaryRuneIDs  []int   `json:"primaryRuneIds"`
+	SecondaryRuneIDs []int  `json:"secondaryRuneIds"`
+	ShardIDs        []int   `json:"shardIds"`
+	WinRate         float64 `json:"winRate"`
+	Games           int     `json:"games"`
 }
 
-func (cd *champData) toRuneData(patch, role, region string) map[string]interface{} {
-	var entries []runeEntry
-	for id, wr := range cd.runes {
-		if wr.games < minSample {
-			continue
-		}
-		entries = append(entries, runeEntry{
-			RuneID:   id,
-			WinRate:  float64(wr.wins) / float64(wr.games),
-			PickRate: float64(wr.games) / float64(cd.games),
-			Games:    wr.games,
-		})
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Games > entries[j].Games })
+func (cd *champData) toRuneData(patch, role, region string) storedRuneData {
+	type idGames struct{ id, games int }
 
-	return map[string]interface{}{
-		"patch":      patch,
-		"role":       role,
-		"region":     region,
-		"sampleSize": cd.games,
-		"runes":      entries,
+	// Most popular primary path
+	var bestPrimPathID, bestPrimGames int
+	var totalWins, totalGames int
+	for pid, wr := range cd.primaryPaths {
+		totalWins += wr.wins
+		totalGames += wr.games
+		if wr.games > bestPrimGames {
+			bestPrimGames = wr.games
+			bestPrimPathID = pid
+		}
+	}
+
+	// Most popular secondary path
+	var bestSecPathID, bestSecGames int
+	for pid, wr := range cd.secondaryPaths {
+		if wr.games > bestSecGames {
+			bestSecGames = wr.games
+			bestSecPathID = pid
+		}
+	}
+
+	// Top 4 primary rune IDs (by games) for the best primary path
+	var primRunes []idGames
+	for id, wr := range cd.primaryRunes[bestPrimPathID] {
+		primRunes = append(primRunes, idGames{id, wr.games})
+	}
+	sort.Slice(primRunes, func(i, j int) bool { return primRunes[i].games > primRunes[j].games })
+	if len(primRunes) > 4 {
+		primRunes = primRunes[:4]
+	}
+	primaryRuneIDs := make([]int, len(primRunes))
+	for i, e := range primRunes {
+		primaryRuneIDs[i] = e.id
+	}
+
+	// Top 2 secondary rune IDs for the best secondary path
+	var secRunes []idGames
+	for id, wr := range cd.secondaryRunes[bestSecPathID] {
+		secRunes = append(secRunes, idGames{id, wr.games})
+	}
+	sort.Slice(secRunes, func(i, j int) bool { return secRunes[i].games > secRunes[j].games })
+	if len(secRunes) > 2 {
+		secRunes = secRunes[:2]
+	}
+	secondaryRuneIDs := make([]int, len(secRunes))
+	for i, e := range secRunes {
+		secondaryRuneIDs[i] = e.id
+	}
+
+	// Most popular shard per slot
+	shardIDs := make([]int, 3)
+	for slot := 0; slot < 3; slot++ {
+		var bestID, bestCount int
+		for id, count := range cd.shards[slot] {
+			if count > bestCount {
+				bestCount = count
+				bestID = id
+			}
+		}
+		shardIDs[slot] = bestID
+	}
+
+	var winRate float64
+	if totalGames > 0 {
+		winRate = float64(totalWins) / float64(totalGames)
+	}
+
+	return storedRuneData{
+		Patch:            patch,
+		Role:             role,
+		Region:           region,
+		SampleSize:       cd.games,
+		PrimaryPathID:    bestPrimPathID,
+		SecondaryPathID:  bestSecPathID,
+		PrimaryRuneIDs:   primaryRuneIDs,
+		SecondaryRuneIDs: secondaryRuneIDs,
+		ShardIDs:         shardIDs,
+		WinRate:          winRate,
+		Games:            totalGames,
 	}
 }
 

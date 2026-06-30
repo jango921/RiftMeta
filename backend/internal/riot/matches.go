@@ -46,10 +46,10 @@ type Participant struct {
 	Kills                       int    `json:"kills"`
 	Perks                       Perks  `json:"perks"`
 	PUUID                       string `json:"puuid"`
-	Spell1Casts                 int    `json:"spell1Casts"`
-	Spell2Casts                 int    `json:"spell2Casts"`
 	SummonerSpell1ID            int    `json:"summoner1Id"`
 	SummonerSpell2ID            int    `json:"summoner2Id"`
+	Summoner1Casts              int    `json:"summoner1Casts"`
+	Summoner2Casts              int    `json:"summoner2Casts"`
 	TeamID                      int    `json:"teamId"`
 	TeamPosition                string `json:"teamPosition"`
 	TotalMinionsKilled          int    `json:"totalMinionsKilled"`
