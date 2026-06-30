@@ -37,6 +37,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       DEFAULT_REGION: ${DEFAULT_REGION:-na1}
       DEFAULT_ROUTING: ${DEFAULT_ROUTING:-americas}
+      SKIP_INITIAL_WORKER: ${SKIP_INITIAL_WORKER:-false}
       PORT: 8080
     depends_on:
       postgres:

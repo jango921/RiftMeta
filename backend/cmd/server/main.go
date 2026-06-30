@@ -56,14 +56,16 @@ func main() {
 	h := handlers.New(riotClient, cacheClient, database, w, cfg.DefaultRegion, cfg.DefaultRouting)
 	app := api.NewRouter(h)
 
-	go func() {
-		// Initial run on startup
-		runCtx, runCancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer runCancel()
-		if err := w.RunOnce(runCtx); err != nil {
-			log.Warn("worker initial run", zap.Error(err))
-		}
-	}()
+	if os.Getenv("SKIP_INITIAL_WORKER") != "true" {
+		go func() {
+			// Initial run on startup
+			runCtx, runCancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer runCancel()
+			if err := w.RunOnce(runCtx); err != nil {
+				log.Warn("worker initial run", zap.Error(err))
+			}
+		}()
+	}
 
 	// Schedule worker to run every 4 hours via goroutine ticker
 	go func() {

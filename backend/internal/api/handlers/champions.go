@@ -104,7 +104,7 @@ func (h *Handler) TriggerWorker(c *fiber.Ctx) error {
 	go func() {
 		timeout := 30 * time.Minute
 		if opts.TargetMatches > 0 {
-			timeout = 12 * time.Hour
+			timeout = 48 * time.Hour
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()

@@ -6,16 +6,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
 const (
-	// Riot personal API key rate limits: 20 req/s, 100 req/2min
-	// We stay well below those limits
-	ratePerSecond = 15
-	rateBurst     = 20
+	// Riot personal API keys are commonly capped at 100 requests per 2 minutes.
+	// A 1 req/s local limiter plus Retry-After handling keeps collection gentle.
+	ratePerSecond = 1
+	rateBurst     = 1
 
 	baseDataDragonURL = "https://ddragon.leagueoflegends.com"
 )
@@ -58,8 +59,13 @@ func (c *RiotClient) get(ctx context.Context, url string, withAuth bool) ([]byte
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		// Back off and retry once
-		time.Sleep(2 * time.Second)
+		backoff := 2 * time.Second
+		if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+			if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+				backoff = time.Duration(seconds) * time.Second
+			}
+		}
+		time.Sleep(backoff)
 		return c.get(ctx, url, withAuth)
 	}
 
