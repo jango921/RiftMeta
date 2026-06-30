@@ -120,11 +120,11 @@ func (c *RiotClient) GetMatch(ctx context.Context, routing, matchID string) (*Ma
 	return &match, nil
 }
 
-// GetChallengerPlayers returns Challenger-tier players for seeding match collection
-func (c *RiotClient) GetChallengerPlayers(ctx context.Context, region string) (*LeagueListDTO, error) {
+// GetLeaguePlayers returns apex-tier players for seeding match collection.
+func (c *RiotClient) GetLeaguePlayers(ctx context.Context, region, tier string) (*LeagueListDTO, error) {
 	url := fmt.Sprintf(
-		"https://%s.api.riotgames.com/lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5",
-		region,
+		"https://%s.api.riotgames.com/lol/league/v4/%sleagues/by-queue/RANKED_SOLO_5x5",
+		region, tier,
 	)
 
 	b, err := c.get(ctx, url, true)
@@ -137,6 +137,11 @@ func (c *RiotClient) GetChallengerPlayers(ctx context.Context, region string) (*
 		return nil, fmt.Errorf("parse challenger league: %w", err)
 	}
 	return &league, nil
+}
+
+// GetChallengerPlayers returns Challenger-tier players for diagnostics and default seeding.
+func (c *RiotClient) GetChallengerPlayers(ctx context.Context, region string) (*LeagueListDTO, error) {
+	return c.GetLeaguePlayers(ctx, region, "challenger")
 }
 
 // GetSummonerByID returns summoner data by encrypted summoner ID

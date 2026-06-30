@@ -21,12 +21,20 @@ import (
 
 // Status describes the current state of the worker
 type Status struct {
-	Running          bool      `json:"running"`
-	LastRunAt        time.Time `json:"lastRunAt"`
-	LastRunPatch     string    `json:"lastRunPatch"`
-	MatchesTotal     int       `json:"matchesTotal"`
-	MatchesThisRun   int32     `json:"matchesThisRun"` // live counter, updated atomically
-	Error            string    `json:"error,omitempty"`
+	Running        bool      `json:"running"`
+	LastRunAt      time.Time `json:"lastRunAt"`
+	LastRunPatch   string    `json:"lastRunPatch"`
+	MatchesTotal   int       `json:"matchesTotal"`
+	MatchesThisRun int32     `json:"matchesThisRun"` // live counter, updated atomically
+	TargetMatches  int       `json:"targetMatches"`
+	Error          string    `json:"error,omitempty"`
+}
+
+// RunOptions controls how much match history the worker should collect.
+type RunOptions struct {
+	TargetMatches    int
+	PlayerLimit      int
+	MatchesPerPlayer int
 }
 
 // Worker collects and aggregates match data in the background
@@ -42,6 +50,16 @@ type Worker struct {
 	status         Status
 	matchesThisRun int32 // atomic live counter
 }
+
+const (
+	defaultTargetMatches    = 0
+	defaultPlayerLimit      = 100
+	defaultMatchesPerPlayer = 20
+	maxTargetMatches        = 100000
+	maxPlayerLimit          = 5000
+	maxMatchesPerPlayer     = 500
+	matchIDPageSize         = 100
+)
 
 // New creates a Worker
 func New(rc *riot.RiotClient, database *db.DB, cacheClient *cache.Client, log *zap.Logger, region, routing string) *Worker {
@@ -73,6 +91,13 @@ func (w *Worker) IsRunning() bool {
 
 // RunOnce performs a full update cycle. Concurrent calls return immediately if already running.
 func (w *Worker) RunOnce(ctx context.Context) error {
+	return w.RunWithOptions(ctx, RunOptions{})
+}
+
+// RunWithOptions performs a full update cycle with bounded collection controls.
+func (w *Worker) RunWithOptions(ctx context.Context, opts RunOptions) error {
+	opts = normalizeRunOptions(opts)
+
 	w.mu.Lock()
 	if w.status.Running {
 		w.mu.Unlock()
@@ -80,6 +105,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	}
 	w.status.Running = true
 	w.status.Error = ""
+	w.status.TargetMatches = opts.TargetMatches
 	atomic.StoreInt32(&w.matchesThisRun, 0)
 	w.mu.Unlock()
 
@@ -98,7 +124,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	}
 	patch := patchFromVersion(version)
 
-	puuids, err := w.seedPUUIDs(ctx)
+	puuids, err := w.seedPUUIDs(ctx, opts.PlayerLimit)
 	if err != nil {
 		msg := fmt.Sprintf("seed puuids failed: %s", err)
 		w.log.Warn("worker: " + msg)
@@ -113,30 +139,52 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		if ctx.Err() != nil {
 			break
 		}
-		matchIDs, err := w.riot.GetMatchIDs(ctx, w.routing, puuid, 0, 20)
-		if err != nil {
-			w.log.Warn("worker: get match ids", zap.Error(err), zap.String("puuid", puuid[:8]))
-			continue
+		if opts.TargetMatches > 0 && int(atomic.LoadInt32(&w.matchesThisRun)) >= opts.TargetMatches {
+			break
 		}
-		for _, matchID := range matchIDs {
-			if w.alreadyProcessed(ctx, matchID) {
-				continue
+
+		for start := 0; start < opts.MatchesPerPlayer; start += matchIDPageSize {
+			count := matchIDPageSize
+			if remaining := opts.MatchesPerPlayer - start; remaining < count {
+				count = remaining
 			}
-			match, err := w.riot.GetMatch(ctx, w.routing, matchID)
+
+			matchIDs, err := w.riot.GetMatchIDs(ctx, w.routing, puuid, start, count)
 			if err != nil {
-				w.log.Warn("worker: get match", zap.Error(err), zap.String("id", matchID))
+				w.log.Warn("worker: get match ids", zap.Error(err), zap.String("puuid", safePrefix(puuid, 8)), zap.Int("start", start))
 				continue
 			}
-			if match.Info.QueueID != 420 {
-				continue
+			if len(matchIDs) == 0 {
+				break
 			}
-			agg.ingest(match, patch)
-			w.markProcessed(ctx, matchID, patch)
-			n := atomic.AddInt32(&w.matchesThisRun, 1)
-			if n%50 == 0 {
-				w.log.Info("worker: progress", zap.Int32("matches", n))
+
+			for _, matchID := range matchIDs {
+				if opts.TargetMatches > 0 && int(atomic.LoadInt32(&w.matchesThisRun)) >= opts.TargetMatches {
+					break
+				}
+				if w.alreadyProcessed(ctx, matchID) {
+					continue
+				}
+				match, err := w.riot.GetMatch(ctx, w.routing, matchID)
+				if err != nil {
+					w.log.Warn("worker: get match", zap.Error(err), zap.String("id", matchID))
+					continue
+				}
+				if match.Info.QueueID != 420 {
+					continue
+				}
+				before := agg.totalGames
+				agg.ingest(match, patch)
+				if agg.totalGames == before {
+					continue
+				}
+				w.markProcessed(ctx, matchID, patch)
+				n := atomic.AddInt32(&w.matchesThisRun, 1)
+				if n%50 == 0 {
+					w.log.Info("worker: progress", zap.Int32("matches", n), zap.Int("target", opts.TargetMatches))
+				}
+				time.Sleep(60 * time.Millisecond)
 			}
-			time.Sleep(60 * time.Millisecond)
 		}
 	}
 
@@ -148,16 +196,39 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		return fmt.Errorf("persist: %w", err)
 	}
 
-	w.cache.Delete(ctx, "meta:top:"+w.region)
+	w.bustMetaCaches(ctx)
 
 	w.mu.Lock()
 	w.status.LastRunAt = time.Now()
 	w.status.LastRunPatch = patch
 	w.status.MatchesTotal += processed
+	w.status.TargetMatches = 0
 	w.mu.Unlock()
 
 	w.log.Info("worker: update cycle complete", zap.String("patch", patch), zap.Int("processed", processed))
 	return nil
+}
+
+func normalizeRunOptions(opts RunOptions) RunOptions {
+	if opts.TargetMatches < 0 {
+		opts.TargetMatches = defaultTargetMatches
+	}
+	if opts.TargetMatches > maxTargetMatches {
+		opts.TargetMatches = maxTargetMatches
+	}
+	if opts.PlayerLimit <= 0 {
+		opts.PlayerLimit = defaultPlayerLimit
+	}
+	if opts.PlayerLimit > maxPlayerLimit {
+		opts.PlayerLimit = maxPlayerLimit
+	}
+	if opts.MatchesPerPlayer <= 0 {
+		opts.MatchesPerPlayer = defaultMatchesPerPlayer
+	}
+	if opts.MatchesPerPlayer > maxMatchesPerPlayer {
+		opts.MatchesPerPlayer = maxMatchesPerPlayer
+	}
+	return opts
 }
 
 func (w *Worker) setError(msg string) {
@@ -166,39 +237,53 @@ func (w *Worker) setError(msg string) {
 	w.mu.Unlock()
 }
 
-func (w *Worker) seedPUUIDs(ctx context.Context) ([]string, error) {
-	league, err := w.riot.GetChallengerPlayers(ctx, w.region)
-	if err != nil {
-		return nil, err
-	}
-
-	limit := 100
-	if len(league.Entries) < limit {
-		limit = len(league.Entries)
-	}
-
+func (w *Worker) seedPUUIDs(ctx context.Context, limit int) ([]string, error) {
 	var puuids []string
-	for _, entry := range league.Entries[:limit] {
-		// Modern API v4 includes puuid directly — use it and skip the summoner call
-		if entry.PUUID != "" {
-			puuids = append(puuids, entry.PUUID)
-			continue
-		}
+	seen := make(map[string]bool)
+	totalEntries := 0
 
-		// Fallback for older API responses that lack the puuid field
-		if entry.SummonerID == "" {
-			continue
+	for _, tier := range []string{"challenger", "grandmaster", "master"} {
+		if len(puuids) >= limit {
+			break
 		}
-		summoner, err := w.riot.GetSummonerByID(ctx, w.region, entry.SummonerID)
+		league, err := w.riot.GetLeaguePlayers(ctx, w.region, tier)
 		if err != nil {
-			w.log.Warn("worker: summoner lookup failed", zap.String("id", entry.SummonerID), zap.Error(err))
+			if len(puuids) == 0 {
+				return nil, err
+			}
+			w.log.Warn("worker: league seed failed", zap.String("tier", tier), zap.Error(err))
 			continue
 		}
-		puuids = append(puuids, summoner.PUUID)
-		time.Sleep(60 * time.Millisecond)
+		totalEntries += len(league.Entries)
+
+		sort.SliceStable(league.Entries, func(i, j int) bool {
+			return league.Entries[i].LeaguePoints > league.Entries[j].LeaguePoints
+		})
+
+		for _, entry := range league.Entries {
+			if len(puuids) >= limit {
+				break
+			}
+
+			puuid := entry.PUUID
+			if puuid == "" && entry.SummonerID != "" {
+				summoner, err := w.riot.GetSummonerByID(ctx, w.region, entry.SummonerID)
+				if err != nil {
+					w.log.Warn("worker: summoner lookup failed", zap.String("id", entry.SummonerID), zap.Error(err))
+					continue
+				}
+				puuid = summoner.PUUID
+				time.Sleep(60 * time.Millisecond)
+			}
+			if puuid == "" || seen[puuid] {
+				continue
+			}
+			seen[puuid] = true
+			puuids = append(puuids, puuid)
+		}
 	}
 
-	w.log.Info("worker: resolved puuids", zap.Int("count", len(puuids)), zap.Int("total_challengers", len(league.Entries)))
+	w.log.Info("worker: resolved puuids", zap.Int("count", len(puuids)), zap.Int("limit", limit), zap.Int("total_entries", totalEntries))
 	return puuids, nil
 }
 
@@ -217,6 +302,20 @@ func (w *Worker) markProcessed(ctx context.Context, matchID, patch string) {
 		 ON CONFLICT (match_id) DO UPDATE SET processed = true, processed_at = NOW()`,
 		matchID, w.region, patch,
 	)
+}
+
+func (w *Worker) bustMetaCaches(ctx context.Context) {
+	w.cache.Delete(ctx, "meta:top:"+w.region)
+	for _, role := range []string{"", "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"} {
+		w.cache.Delete(ctx, fmt.Sprintf("meta:top:%s:%s", w.region, role))
+	}
+}
+
+func safePrefix(s string, n int) string {
+	if len(s) < n {
+		return s
+	}
+	return s[:n]
 }
 
 // persist saves all aggregated champion data to PostgreSQL
@@ -286,13 +385,13 @@ func (w *Worker) persist(ctx context.Context, agg *aggregator, patch string) err
 // ---- Aggregation types ----
 
 type champData struct {
-	wins    int
-	losses  int
-	games   int
-	bans    int
-	items   map[int]*winRate
-	spells  map[string]*winRate
-	counters map[string]*winRate
+	wins       int
+	losses     int
+	games      int
+	bans       int
+	items      map[int]*winRate
+	spells     map[string]*winRate
+	counters   map[string]*winRate
 	skillCasts [4]int
 	// Rune tracking (split by primary/secondary path)
 	primaryPaths   map[int]*winRate         // pathID → {wins, games}
@@ -533,11 +632,18 @@ func (cd *champData) toBuildData(patch, role, region string) models.ChampionBuil
 	}
 
 	// Infer skill max order from cast frequency (R always last)
-	type sc struct{ label string; count int }
+	type sc struct {
+		label string
+		count int
+	}
 	skills := []sc{{"Q", cd.skillCasts[0]}, {"W", cd.skillCasts[1]}, {"E", cd.skillCasts[2]}, {"R", cd.skillCasts[3]}}
 	sort.Slice(skills, func(i, j int) bool {
-		if skills[i].label == "R" { return false }
-		if skills[j].label == "R" { return true }
+		if skills[i].label == "R" {
+			return false
+		}
+		if skills[j].label == "R" {
+			return true
+		}
 		return skills[i].count > skills[j].count
 	})
 	maxOrder := make([]string, len(skills))
@@ -559,17 +665,17 @@ func (cd *champData) toBuildData(patch, role, region string) models.ChampionBuil
 // storedRuneData is the format saved to champion_runes in the DB.
 // The handler enriches it with Data Dragon path/rune metadata before returning to the client.
 type storedRuneData struct {
-	Patch           string  `json:"patch"`
-	Role            string  `json:"role"`
-	Region          string  `json:"region"`
-	SampleSize      int     `json:"sampleSize"`
-	PrimaryPathID   int     `json:"primaryPathId"`
-	SecondaryPathID int     `json:"secondaryPathId"`
-	PrimaryRuneIDs  []int   `json:"primaryRuneIds"`
-	SecondaryRuneIDs []int  `json:"secondaryRuneIds"`
-	ShardIDs        []int   `json:"shardIds"`
-	WinRate         float64 `json:"winRate"`
-	Games           int     `json:"games"`
+	Patch            string  `json:"patch"`
+	Role             string  `json:"role"`
+	Region           string  `json:"region"`
+	SampleSize       int     `json:"sampleSize"`
+	PrimaryPathID    int     `json:"primaryPathId"`
+	SecondaryPathID  int     `json:"secondaryPathId"`
+	PrimaryRuneIDs   []int   `json:"primaryRuneIds"`
+	SecondaryRuneIDs []int   `json:"secondaryRuneIds"`
+	ShardIDs         []int   `json:"shardIds"`
+	WinRate          float64 `json:"winRate"`
+	Games            int     `json:"games"`
 }
 
 func (cd *champData) toRuneData(patch, role, region string) storedRuneData {
@@ -680,8 +786,12 @@ func (cd *champData) toCounterData(championID, patch, role, region string) model
 	sort.Slice(beats, func(i, j int) bool { return beats[i].WinRate > beats[j].WinRate })
 	sort.Slice(loses, func(i, j int) bool { return loses[i].WinRate < loses[j].WinRate })
 
-	if len(beats) > 10 { beats = beats[:10] }
-	if len(loses) > 10 { loses = loses[:10] }
+	if len(beats) > 10 {
+		beats = beats[:10]
+	}
+	if len(loses) > 10 {
+		loses = loses[:10]
+	}
 
 	return models.ChampionCounters{
 		ChampionID:      championID,
@@ -698,12 +808,18 @@ func (cd *champData) toCounterData(championID, patch, role, region string) model
 
 func normalizeRole(pos string) string {
 	switch strings.ToUpper(pos) {
-	case "TOP":                   return "TOP"
-	case "JUNGLE":                return "JUNGLE"
-	case "MIDDLE", "MID":        return "MIDDLE"
-	case "BOTTOM", "BOT", "ADC": return "BOTTOM"
-	case "UTILITY", "SUPPORT":   return "UTILITY"
-	default:                      return "UNKNOWN"
+	case "TOP":
+		return "TOP"
+	case "JUNGLE":
+		return "JUNGLE"
+	case "MIDDLE", "MID":
+		return "MIDDLE"
+	case "BOTTOM", "BOT", "ADC":
+		return "BOTTOM"
+	case "UTILITY", "SUPPORT":
+		return "UTILITY"
+	default:
+		return "UNKNOWN"
 	}
 }
 

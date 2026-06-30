@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -88,6 +89,12 @@ func (h *Handler) TriggerWorker(c *fiber.Ctx) error {
 		})
 	}
 
+	opts := worker.RunOptions{
+		TargetMatches:    intQuery(c, "target", 0),
+		PlayerLimit:      intQuery(c, "players", 0),
+		MatchesPerPlayer: intQuery(c, "matchesPerPlayer", 0),
+	}
+
 	if c.Query("reset") == "true" {
 		if _, err := h.db.Pool.Exec(c.Context(), `DELETE FROM processed_matches`); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "reset failed: " + err.Error()})
@@ -95,12 +102,35 @@ func (h *Handler) TriggerWorker(c *fiber.Ctx) error {
 	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		timeout := 30 * time.Minute
+		if opts.TargetMatches > 0 {
+			timeout = 12 * time.Hour
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		h.worker.RunOnce(ctx) //nolint:errcheck
+		h.worker.RunWithOptions(ctx, opts) //nolint:errcheck
 	}()
 
-	return c.JSON(fiber.Map{"message": "worker started"})
+	return c.JSON(fiber.Map{
+		"message": "worker started",
+		"options": fiber.Map{
+			"target":           opts.TargetMatches,
+			"players":          opts.PlayerLimit,
+			"matchesPerPlayer": opts.MatchesPerPlayer,
+		},
+	})
+}
+
+func intQuery(c *fiber.Ctx, key string, fallback int) int {
+	raw := c.Query(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 
 // GetVersion returns the current Data Dragon version
