@@ -59,6 +59,7 @@ const (
 	maxPlayerLimit          = 5000
 	maxMatchesPerPlayer     = 500
 	matchIDPageSize         = 100
+	checkpointEveryMatches  = 1000
 )
 
 // New creates a Worker
@@ -184,6 +185,14 @@ func (w *Worker) RunWithOptions(ctx context.Context, opts RunOptions) error {
 				n := atomic.AddInt32(&w.matchesThisRun, 1)
 				if n%50 == 0 {
 					w.log.Info("worker: progress", zap.Int32("matches", n), zap.Int("target", opts.TargetMatches))
+				}
+				if n%checkpointEveryMatches == 0 {
+					if err := w.persist(ctx, agg, patch); err != nil {
+						w.log.Warn("worker: checkpoint persist", zap.Int32("matches", n), zap.Error(err))
+					} else {
+						w.bustMetaCaches(ctx)
+						w.log.Info("worker: checkpoint persisted", zap.Int32("matches", n))
+					}
 				}
 				time.Sleep(60 * time.Millisecond)
 			}
