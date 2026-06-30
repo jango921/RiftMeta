@@ -148,6 +148,7 @@ func (w *Worker) RunWithOptions(ctx context.Context, opts RunOptions) error {
 			if remaining := opts.MatchesPerPlayer - start; remaining < count {
 				count = remaining
 			}
+			pageAccepted := 0
 
 			matchIDs, err := w.riot.GetMatchIDs(ctx, w.routing, puuid, start, count)
 			if err != nil {
@@ -178,12 +179,16 @@ func (w *Worker) RunWithOptions(ctx context.Context, opts RunOptions) error {
 				if agg.totalGames == before {
 					continue
 				}
+				pageAccepted++
 				w.markProcessed(ctx, matchID, patch)
 				n := atomic.AddInt32(&w.matchesThisRun, 1)
 				if n%50 == 0 {
 					w.log.Info("worker: progress", zap.Int32("matches", n), zap.Int("target", opts.TargetMatches))
 				}
 				time.Sleep(60 * time.Millisecond)
+			}
+			if pageAccepted == 0 {
+				break
 			}
 		}
 	}
